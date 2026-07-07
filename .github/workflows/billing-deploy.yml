@@ -1,0 +1,17 @@
+name: Deploy Billing System
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'billing-system/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Deploy to Railway
+        run: npm install -g railway && railway up --service uuon-foundation-billing
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
