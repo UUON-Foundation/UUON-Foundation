@@ -1,0 +1,127 @@
+version: '3.9'
+
+services:
+  consensus-manager:
+    build:
+      context: .
+      dockerfile: Dockerfile.consensus
+    container_name: clouud-consensus
+    environment:
+      CLOUUD_NODES: "primary:9090,sentinel-1:9090,sentinel-2:9090,sentinel-3:9090"
+      CONSENSUS_THRESHOLD: 3
+      PORT: 7070
+    ports:
+      - "7070:7070"
+    networks:
+      - clouud-network
+    restart: unless-stopped
+
+  blockchain-publisher:
+    build:
+      context: .
+      dockerfile: Dockerfile.blockchain
+    container_name: clouud-blockchain
+    environment:
+      PORT: 8081
+    ports:
+      - "8081:8081"
+    depends_on:
+      - consensus-manager
+    networks:
+      - clouud-network
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: clouud-postgres
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: uuon
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres-network-data:/var/lib/postgresql/data
+    networks:
+      - clouud-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d uuon"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  primary:
+    image: uuon-foundation-billing-api:latest
+    container_name: clouud-primary
+    environment:
+      CLOUUD_ROLE: primary
+      NODE_ENV: production
+      PORT: 8080
+      DATABASE_URL: postgresql://user:password@clouud-postgres:5432/uuon
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+      - consensus-manager
+    networks:
+      - clouud-network
+    restart: unless-stopped
+
+  sentinel-1:
+    image: uuon-foundation-billing-api:latest
+    container_name: clouud-sentinel-1
+    environment:
+      CLOUUD_ROLE: sentinel
+      NODE_ENV: production
+      PORT: 8080
+      DATABASE_URL: postgresql://user:password@clouud-postgres:5432/uuon
+    ports:
+      - "9091:8080"
+    depends_on:
+      - postgres
+      - primary
+    networks:
+      - clouud-network
+    restart: unless-stopped
+
+  sentinel-2:
+    image: uuon-foundation-billing-api:latest
+    container_name: clouud-sentinel-2
+    environment:
+      CLOUUD_ROLE: sentinel
+      NODE_ENV: production
+      PORT: 8080
+      DATABASE_URL: postgresql://user:password@clouud-postgres:5432/uuon
+    ports:
+      - "9092:8080"
+    depends_on:
+      - postgres
+      - primary
+    networks:
+      - clouud-network
+    restart: unless-stopped
+
+  sentinel-3:
+    image: uuon-foundation-billing-api:latest
+    container_name: clouud-sentinel-3
+    environment:
+      CLOUUD_ROLE: sentinel
+      NODE_ENV: production
+      PORT: 8080
+      DATABASE_URL: postgresql://user:password@clouud-postgres:5432/uuon
+    ports:
+      - "9093:8080"
+    depends_on:
+      - postgres
+      - primary
+    networks:
+      - clouud-network
+    restart: unless-stopped
+
+volumes:
+  postgres-network-data:
+
+networks:
+  clouud-network:
+    driver: bridge

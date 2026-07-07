@@ -1,0 +1,10 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+RUN npm init -y && npm install express axios
+
+COPY consensus-manager.js .
+
+EXPOSE 7070
+CMD ["node", "consensus-manager.js"]
