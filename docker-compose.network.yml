@@ -1,0 +1,390 @@
+version: '3.9'
+
+# ========================================================================
+# CLOUUD AUTONOMOUS NETWORK
+# Distributed proof generation, validation, and blockchain publishing
+# ========================================================================
+
+services:
+  # ====================================================================
+  # PRIMARY NODE (Core Clouud - Proof Generator)
+  # ====================================================================
+  primary:
+    image: uuon/clouud:latest
+    build:
+      context: ./billing-system
+      dockerfile: Dockerfile
+    container_name: clouud-primary
+    environment:
+      # Node Configuration
+      CLOUUD_ROLE: primary
+      CLOUUD_NODE_ID: primary-001
+      NODE_ENV: production
+      PORT: 8080
+      
+      # Peers (Sentinels + Clones)
+      CLOUUD_PEERS: "sentinel-1:9090,sentinel-2:9090,sentinel-3:9090,clone-1:9090,clone-2:9090"
+      CLOUUD_CONSENSUS_MANAGER: "consensus-manager:7070"
+      
+      # Database
+      DATABASE_URL: postgresql://user:[REDACTED]@postgres:5432/uuon
+      
+      # Blockchain
+      ETHEREUM_RPC_URL: https://eth.publicnode.com
+      BLOCKCHAIN_PUBLISHER_URL: http://blockchain-publisher:8081
+      
+      # Autonomous Operation
+      CLOUUD_AUTO_PUBLISH: "true"
+      CLOUUD_PUBLISH_INTERVAL_MS: 60000
+      CLOUUD_AUTO_HEAL: "true"
+      CLOUUD_HEALTH_CHECK_INTERVAL_MS: 30000
+    ports:
+      - "8080:8080"  # Public API
+      - "9090:9090"  # Peer communication
+    depends_on:
+      postgres:
+        condition: service_healthy
+      consensus-manager:
+        condition: service_started
+    networks:
+      - clouud-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    volumes:
+      - primary-logs:/app/logs
+
+  # ====================================================================
+  # SENTINEL NODES (Validators - Proof Verification)
+  # ====================================================================
+  sentinel-1:
+    image: uuon/clouud:latest
+    build:
+      context: ./billing-system
+      dockerfile: Dockerfile
+    container_name: clouud-sentinel-1
+    environment:
+      CLOUUD_ROLE: sentinel
+      CLOUUD_NODE_ID: sentinel-001
+      NODE_ENV: production
+      PORT: 8080
+      CLOUUD_PRIMARY: "primary:9090"
+      CLOUUD_PEERS: "sentinel-2:9090,sentinel-3:9090"
+      CLOUUD_CONSENSUS_MANAGER: "consensus-manager:7070"
+      DATABASE_URL: postgresql://user:[REDACTED]@postgres:5432/uuon
+      CLOUUD_VERIFY_TIMEOUT_MS: 5000
+    ports:
+      - "9091:9090"
+    depends_on:
+      - primary
+      - postgres
+      - consensus-manager
+    networks:
+      - clouud-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    volumes:
+      - sentinel-1-logs:/app/logs
+
+  sentinel-2:
+    image: uuon/clouud:latest
+    build:
+      context: ./billing-system
+      dockerfile: Dockerfile
+    container_name: clouud-sentinel-2
+    environment:
+      CLOUUD_ROLE: sentinel
+      CLOUUD_NODE_ID: sentinel-002
+      NODE_ENV: production
+      PORT: 8080
+      CLOUUD_PRIMARY: "primary:9090"
+      CLOUUD_PEERS: "sentinel-1:9090,sentinel-3:9090"
+      CLOUUD_CONSENSUS_MANAGER: "consensus-manager:7070"
+      DATABASE_URL: postgresql://user:[REDACTED]@postgres:5432/uuon
+      CLOUUD_VERIFY_TIMEOUT_MS: 5000
+    ports:
+      - "9092:9090"
+    depends_on:
+      - primary
+      - postgres
+      - consensus-manager
+    networks:
+      - clouud-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    volumes:
+      - sentinel-2-logs:/app/logs
+
+  sentinel-3:
+    image: uuon/clouud:latest
+    build:
+      context: ./billing-system
+      dockerfile: Dockerfile
+    container_name: clouud-sentinel-3
+    environment:
+      CLOUUD_ROLE: sentinel
+      CLOUUD_NODE_ID: sentinel-003
+      NODE_ENV: production
+      PORT: 8080
+      CLOUUD_PRIMARY: "primary:9090"
+      CLOUUD_PEERS: "sentinel-1:9090,sentinel-2:9090"
+      CLOUUD_CONSENSUS_MANAGER: "consensus-manager:7070"
+      DATABASE_URL: postgresql://user:[REDACTED]@postgres:5432/uuon
+      CLOUUD_VERIFY_TIMEOUT_MS: 5000
+    ports:
+      - "9093:9090"
+    depends_on:
+      - primary
+      - postgres
+      - consensus-manager
+    networks:
+      - clouud-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    volumes:
+      - sentinel-3-logs:/app/logs
+
+  # ====================================================================
+  # CLONE NODES (Replicas - Redundancy & Load Balancing)
+  # ====================================================================
+  clone-1:
+    image: uuon/clouud:latest
+    build:
+      context: ./billing-system
+      dockerfile: Dockerfile
+    container_name: clouud-clone-1
+    environment:
+      CLOUUD_ROLE: clone
+      CLOUUD_NODE_ID: clone-001
+      NODE_ENV: production
+      PORT: 8080
+      CLOUUD_PRIMARY: "primary:9090"
+      CLOUUD_PEERS: "clone-2:9090"
+      CLOUUD_CONSENSUS_MANAGER: "consensus-manager:7070"
+      DATABASE_URL: postgresql://user:[REDACTED]@postgres:5432/uuon
+      CLOUUD_READ_ONLY: "true"
+      CLOUUD_FAILOVER_ENABLED: "true"
+    ports:
+      - "9094:9090"
+    depends_on:
+      - primary
+      - postgres
+    networks:
+      - clouud-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    volumes:
+      - clone-1-logs:/app/logs
+
+  clone-2:
+    image: uuon/clouud:latest
+    build:
+      context: ./billing-system
+      dockerfile: Dockerfile
+    container_name: clouud-clone-2
+    environment:
+      CLOUUD_ROLE: clone
+      CLOUUD_NODE_ID: clone-002
+      NODE_ENV: production
+      PORT: 8080
+      CLOUUD_PRIMARY: "primary:9090"
+      CLOUUD_PEERS: "clone-1:9090"
+      CLOUUD_CONSENSUS_MANAGER: "consensus-manager:7070"
+      DATABASE_URL: postgresql://user:[REDACTED]@postgres:5432/uuon
+      CLOUUD_READ_ONLY: "true"
+      CLOUUD_FAILOVER_ENABLED: "true"
+    ports:
+      - "9095:9090"
+    depends_on:
+      - primary
+      - postgres
+    networks:
+      - clouud-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    volumes:
+      - clone-2-logs:/app/logs
+
+  # ====================================================================
+  # CONSENSUS MANAGER (Byzantine Fault Tolerance Orchestrator)
+  # ====================================================================
+  consensus-manager:
+    image: uuon/consensus:latest
+    container_name: clouud-consensus
+    environment:
+      CLOUUD_NODES: "primary:9090,sentinel-1:9090,sentinel-2:9090,sentinel-3:9090,clone-1:9090,clone-2:9090"
+      CONSENSUS_THRESHOLD: 3  # 3 of 5 sentinels/clones must agree
+      CONSENSUS_TIMEOUT_MS: 5000
+      CONSENSUS_LOG_LEVEL: info
+    ports:
+      - "7070:7070"
+    networks:
+      - clouud-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7070/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    volumes:
+      - consensus-logs:/app/logs
+
+  # ====================================================================
+  # BLOCKCHAIN PUBLISHER (Publishes Proofs On-Chain)
+  # ====================================================================
+  blockchain-publisher:
+    image: uuon/blockchain-publisher:latest
+    container_name: clouud-blockchain
+    environment:
+      # Blockchain Configuration
+      ETHEREUM_RPC_URL: https://eth.publicnode.com
+      ETHEREUM_PRIVATE_KEY: ${ETHEREUM_PRIVATE_KEY}
+      CLOUUD_CONTRACT_ADDRESS: ${CLOUUD_CONTRACT_ADDRESS}
+      
+      # Service Configuration
+      CONSENSUS_MANAGER_URL: http://consensus-manager:7070
+      PORT: 8081
+      NODE_ENV: production
+      
+      # Publishing Strategy
+      PUBLISH_ON_CONSENSUS: "true"
+      PUBLISH_MIN_THRESHOLD: 3
+      PUBLISH_GAS_LIMIT: 200000
+      PUBLISH_MAX_GAS_PRICE: "100"  # gwei
+    ports:
+      - "8081:8081"
+    depends_on:
+      - consensus-manager
+    networks:
+      - clouud-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    volumes:
+      - blockchain-logs:/app/logs
+
+  # ====================================================================
+  # LOAD BALANCER (Routes Traffic to Clones & Primary)
+  # ====================================================================
+  nginx:
+    image: nginx:alpine
+    container_name: clouud-lb
+    ports:
+      - "8000:80"  # Public facing
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - primary
+      - clone-1
+      - clone-2
+    networks:
+      - clouud-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # ====================================================================
+  # MONITORING & METRICS (Prometheus + Grafana)
+  # ====================================================================
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: clouud-prometheus
+    environment:
+      PROMETHEUS_CONFIG: /etc/prometheus/prometheus.yml
+    ports:
+      - "9000:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    networks:
+      - clouud-network
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: clouud-grafana
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_INSTALL_PLUGINS: grafana-piechart-panel
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    volumes:
+      - grafana-data:/var/lib/grafana
+    networks:
+      - clouud-network
+    restart: unless-stopped
+
+  # ====================================================================
+  # DATABASE (PostgreSQL - Shared)
+  # ====================================================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: clouud-postgres
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: uuon
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - clouud-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d uuon"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  primary-logs:
+  sentinel-1-logs:
+  sentinel-2-logs:
+  sentinel-3-logs:
+  clone-1-logs:
+  clone-2-logs:
+  consensus-logs:
+  blockchain-logs:
+  prometheus-data:
+  grafana-data:
+
+networks:
+  clouud-network:
+    driver: bridge
