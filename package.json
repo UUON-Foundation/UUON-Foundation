@@ -1,4 +1,11 @@
-"scripts": {
-  "dev": "node server/index.js",
-  "start": "node server/index.js"
+{
+  "name": "uuon-foundation",
+  "version": "1.0.0",
+  "description": "UUON Foundation billing and credit system",
+  "main": "billing-system/server/index.js",
+  "scripts": {
+    "dev": "cd billing-system && npm run dev",
+    "start": "cd billing-system && npm start",
+    "test": "cd billing-system && npm test"
+  }
 }
