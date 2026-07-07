@@ -196,9 +196,9 @@ app.get("/api/v1/status", (req, res) => {
 app.get("/api/v1/packages", listPackages);
 app.get("/api/credits/packages", listPackages); // Legacy
 
-// User Management (requires auth)
+// User Management
+// POST /api/v1/users - public (bootstrap), optional x-user-id for admin context
 app.post("/api/v1/users", 
-  validateUserId, 
   auditLog("user_create"),
   createUser
 );
@@ -208,6 +208,7 @@ app.get("/api/v1/users", listUsers);
 app.get("/api/v1/users/:user_id", 
   param("user_id").isUUID().withMessage("user_id must be UUID"),
   handleValidationErrors,
+  validateUserId,
   getUser
 );
 
