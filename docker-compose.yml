@@ -1,0 +1,36 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: uuon
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d uuon"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  billing-api:
+    build: ./billing-system
+    environment:
+      DATABASE_URL: postgresql://user:password@postgres:5432/uuon
+      PORT: 8080
+      NODE_ENV: development
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./billing-system/server:/app/server
+    command: npm run dev
+
+volumes:
+  postgres_data:
