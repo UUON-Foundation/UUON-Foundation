@@ -1,29 +1,24 @@
-import express from 'express';
+import express from "express";
 
 const app = express();
-const PORT = process.env.PORT || 8080;
+
+const PORT = process.env.PORT || 5001;
 
 app.use(express.json());
 
-// Health check
-app.get('/health', (req, res) => {
+app.get("/", (req, res) => {
   res.json({
-    status: 'ok',
-    service: 'UUON Billing API'
+    status: "online",
+    service: "UUON Foundation Billing System"
   });
 });
 
-// Credit packages
-app.get('/api/credits/packages', (req, res) => {
+app.get("/health", (req, res) => {
   res.json({
-    packages: [
-      { name: 'starter', credits: 100, cost: 50 },
-      { name: 'pro', credits: 500, cost: 200 },
-      { name: 'enterprise', credits: 2000, cost: 700 }
-    ]
+    status: "healthy"
   });
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`UUON Billing API running on port ${PORT}`);
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });
