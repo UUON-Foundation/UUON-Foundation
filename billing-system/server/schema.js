@@ -62,6 +62,73 @@ export async function initializeDatabase() {
       )
     `);
 
+    // Proofs table (Phase A: Proof caching)
+    await query(`
+      CREATE TABLE IF NOT EXISTS proofs (
+        reasoning_hash VARCHAR(64) PRIMARY KEY,
+        proof VARCHAR(255) NOT NULL,
+        user_id UUID REFERENCES users(id),
+        description TEXT,
+        cached BOOLEAN DEFAULT FALSE,
+        usage_count INTEGER DEFAULT 1,
+        created_at TIMESTAMP DEFAULT NOW(),
+        last_used TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
+    // Index for faster queries
+    await query(`
+      CREATE INDEX IF NOT EXISTS idx_proofs_user_id ON proofs(user_id)
+    `);
+
+    // Data Assets table (Phase B: Ecosystem registration)
+    await query(`
+      CREATE TABLE IF NOT EXISTS data_assets (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        owner_id UUID REFERENCES users(id),
+        proof_hash VARCHAR(64) UNIQUE,
+        license VARCHAR(20) DEFAULT 'private',
+        metadata JSONB,
+        data_size_bytes BIGINT,
+        usage_count INTEGER DEFAULT 0,
+        users_referencing INTEGER DEFAULT 0,
+        earnings_accumulated DECIMAL DEFAULT 0,
+        created_at TIMESTAMP DEFAULT NOW(),
+        last_used TIMESTAMP
+      )
+    `);
+
+    // Create indexes for data_assets
+    await query(`CREATE INDEX IF NOT EXISTS idx_data_assets_owner ON data_assets(owner_id)`);
+    await query(`CREATE INDEX IF NOT EXISTS idx_data_assets_license ON data_assets(license)`);
+
+    // Data Asset References (Users accessing shared assets)
+    await query(`
+      CREATE TABLE IF NOT EXISTS data_asset_references (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        asset_id UUID REFERENCES data_assets(id),
+        user_id UUID REFERENCES users(id),
+        license_requested VARCHAR(20),
+        created_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(asset_id, user_id)
+      )
+    `);
+
+    // Data Asset Usage (Track usage for revenue sharing)
+    await query(`
+      CREATE TABLE IF NOT EXISTS data_asset_usage (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        asset_id UUID REFERENCES data_assets(id),
+        user_id UUID REFERENCES users(id),
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
+    // Create indexes for usage tracking
+    await query(`CREATE INDEX IF NOT EXISTS idx_asset_usage_asset ON data_asset_usage(asset_id)`);
+    await query(`CREATE INDEX IF NOT EXISTS idx_asset_usage_user ON data_asset_usage(user_id)`);
+
+
     console.log('✓ Database initialized');
   } catch (error) {
     console.error('Failed to initialize database:', error);

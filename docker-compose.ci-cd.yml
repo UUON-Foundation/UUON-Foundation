@@ -1,0 +1,223 @@
+version: '3.9'
+
+services:
+  # ========================================================================
+  # DATABASE (PostgreSQL - Neon compatible)
+  # ========================================================================
+  
+  postgres:
+    image: postgres:15-alpine
+    container_name: uuon-postgres-ci
+    environment:
+      POSTGRES_USER: uuon_user
+      POSTGRES_PASSWORD: uuon_password_dev
+      POSTGRES_DB: uuon_db
+      POSTGRES_INITDB_ARGS: "-c shared_buffers=256MB -c max_connections=200"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U uuon_user -d uuon_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - uuon-network
+
+  # ========================================================================
+  # BILLING API (Development)
+  # ========================================================================
+  
+  billing-api-dev:
+    build:
+      context: ./billing-system
+      dockerfile: ../Dockerfile.billing
+      target: debug
+    container_name: uuon-billing-api-dev
+    environment:
+      NODE_ENV: development
+      PORT: 5001
+      DATABASE_URL: postgresql://uuon_user:uuon_password_dev@postgres:5432/uuon_db
+      LOG_LEVEL: debug
+    ports:
+      - "5001:5001"
+    volumes:
+      - ./billing-system/server:/app/server
+      - ./billing-system/tests:/app/tests
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - uuon-network
+    command: node server/index.js
+
+  # ========================================================================
+  # BILLING API (Production-like for staging tests)
+  # ========================================================================
+  
+  billing-api-staging:
+    build:
+      context: ./billing-system
+      dockerfile: ../Dockerfile.billing
+      target: production
+    container_name: uuon-billing-api-staging
+    environment:
+      NODE_ENV: production
+      PORT: 5002
+      DATABASE_URL: postgresql://uuon_user:uuon_password_dev@postgres:5432/uuon_db
+      LOG_LEVEL: info
+    ports:
+      - "5002:5002"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - uuon-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ========================================================================
+  # REDIS (Caching & Session storage)
+  # ========================================================================
+  
+  redis:
+    image: redis:7-alpine
+    container_name: uuon-redis-ci
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - uuon-network
+    volumes:
+      - redis_data:/data
+
+  # ========================================================================
+  # MONITORING - Prometheus (Metrics collection)
+  # ========================================================================
+  
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: uuon-prometheus-ci
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    networks:
+      - uuon-network
+
+  # ========================================================================
+  # MONITORING - Grafana (Metrics visualization)
+  # ========================================================================
+  
+  grafana:
+    image: grafana/grafana:latest
+    container_name: uuon-grafana-ci
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_INSTALL_PLUGINS: grafana-clock-panel
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
+    networks:
+      - uuon-network
+
+  # ========================================================================
+  # TESTING - Test runner container
+  # ========================================================================
+  
+  test-runner:
+    build:
+      context: ./billing-system
+      dockerfile: ../Dockerfile.billing
+      target: debug
+    container_name: uuon-test-runner
+    environment:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://uuon_user:uuon_password_dev@postgres:5432/uuon_db_test
+      API_URL: http://billing-api-dev:5001
+    depends_on:
+      postgres:
+        condition: service_healthy
+      billing-api-dev:
+        condition: service_healthy
+    networks:
+      - uuon-network
+    volumes:
+      - ./billing-system:/app
+      - /app/node_modules
+    command: bash -c "
+      echo 'Waiting for services...' &&
+      sleep 10 &&
+      echo 'Running unit tests...' &&
+      node tests/phase-a-proof-caching.test.js &&
+      echo 'Running API tests...' &&
+      bash tests/api-test-phase-a-b.sh || true
+    "
+    profiles:
+      - test
+
+  # ========================================================================
+  # SECURITY - OWASP ZAP (Security scanning)
+  # ========================================================================
+  
+  zap:
+    image: owasp/zap2docker-stable:latest
+    container_name: uuon-zap-security
+    ports:
+      - "8080:8080"
+    environment:
+      ZAP_OPTIONS: "-config api.disablekey=true"
+    networks:
+      - uuon-network
+    profiles:
+      - security
+
+  # ========================================================================
+  # LOAD TESTING - k6 (Performance testing)
+  # ========================================================================
+  
+  load-test:
+    image: loadimpact/k6:latest
+    container_name: uuon-load-test
+    volumes:
+      - ./monitoring/k6-script.js:/scripts/test.js:ro
+    environment:
+      K6_VUS: "10"
+      K6_DURATION: "30s"
+      K6_TARGET_URL: "http://billing-api-staging:5002"
+    networks:
+      - uuon-network
+    profiles:
+      - load-test
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+networks:
+  uuon-network:
+    driver: bridge

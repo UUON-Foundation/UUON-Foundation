@@ -15,6 +15,20 @@ import {
   getTransactionHistory,
   getAnalytics
 } from "./handlers.js";
+import {
+  generateProof,
+  getCacheStats,
+  getProofInfo,
+  checkDuplicate,
+  getProofStats
+} from "./proof-handlers.js";
+import {
+  registerDataAsset,
+  getDataAsset,
+  listDataAssets,
+  getUserAssetStats,
+  useDataAsset
+} from "./asset-handlers.js";
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -288,6 +302,102 @@ app.get("/api/v1/analytics",
   validateUserId, // Can extend this to check for admin role
   auditLog("analytics_view"),
   getAnalytics
+);
+
+// ========================================================================
+// PROOF GENERATION & CACHING ENDPOINTS (Phase A)
+// ========================================================================
+
+// POST /api/v1/proofs/generate - Generate proof from reasoning (with caching)
+app.post("/api/v1/proofs/generate",
+  limiter,
+  validateUserId,
+  body("reasoning").notEmpty().withMessage("reasoning is required"),
+  body("user_id").isUUID().withMessage("user_id must be UUID"),
+  handleValidationErrors,
+  auditLog("proof_generate"),
+  generateProof
+);
+
+// GET /api/v1/proofs/cache/stats - Get cache statistics
+app.get("/api/v1/proofs/cache/stats",
+  validateUserId,
+  auditLog("cache_stats_view"),
+  getCacheStats
+);
+
+// GET /api/v1/proofs/:reasoning_hash/info - Get proof details
+app.get("/api/v1/proofs/:reasoning_hash/info",
+  validateUserId,
+  param("reasoning_hash").isLength({ min: 64, max: 64 }).withMessage("invalid reasoning_hash"),
+  handleValidationErrors,
+  getProofInfo
+);
+
+// POST /api/v1/proofs/check-duplicate - Check if data exists
+app.post("/api/v1/proofs/check-duplicate",
+  limiter,
+  validateUserId,
+  body("data").notEmpty().withMessage("data is required"),
+  handleValidationErrors,
+  auditLog("duplicate_check"),
+  checkDuplicate
+);
+
+// GET /api/v1/proofs/stats/global - Get global proof statistics
+app.get("/api/v1/proofs/stats/global",
+  validateUserId,
+  auditLog("proof_stats_view"),
+  getProofStats
+);
+
+// ========================================================================
+// DATA ASSET ENDPOINTS (Phase B - Ecosystem Registration)
+// ========================================================================
+
+// POST /api/v1/data-assets/register - Register data in ecosystem
+app.post("/api/v1/data-assets/register",
+  limiter,
+  validateUserId,
+  body("owner_id").isUUID().withMessage("owner_id must be UUID"),
+  body("data").notEmpty().withMessage("data is required"),
+  body("license").optional().isIn(["public", "private", "commercial"]),
+  handleValidationErrors,
+  auditLog("data_asset_register"),
+  registerDataAsset
+);
+
+// GET /api/v1/data-assets - List accessible assets
+app.get("/api/v1/data-assets",
+  validateUserId,
+  auditLog("data_assets_list"),
+  listDataAssets
+);
+
+// GET /api/v1/data-assets/:asset_id - Get asset details
+app.get("/api/v1/data-assets/:asset_id",
+  validateUserId,
+  param("asset_id").isUUID().withMessage("asset_id must be UUID"),
+  handleValidationErrors,
+  auditLog("data_asset_get"),
+  getDataAsset
+);
+
+// GET /api/v1/data-assets/stats/user - Get user's asset stats
+app.get("/api/v1/data-assets/stats/user",
+  validateUserId,
+  auditLog("data_asset_stats"),
+  getUserAssetStats
+);
+
+// POST /api/v1/data-assets/:asset_id/use - Use/access an asset
+app.post("/api/v1/data-assets/:asset_id/use",
+  limiter,
+  validateUserId,
+  param("asset_id").isUUID().withMessage("asset_id must be UUID"),
+  handleValidationErrors,
+  auditLog("data_asset_use"),
+  useDataAsset
 );
 
 // 404 handler
