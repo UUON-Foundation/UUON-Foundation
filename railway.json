@@ -1,15 +1,25 @@
 {
-  "$schema": "https://railway.app/json-schema/railway.json",
+  "$schema": "https://railway.com/railway.schema.json",
   "build": {
-    "builder": "dockerfile",
+    "builder": "DOCKERFILE",
     "buildCommand": "docker build -f Dockerfile.billing -t uuon-billing .",
-    "dockerfilePath": "Dockerfile.billing"
+    "dockerfilePath": "Dockerfile.billing",
+    "buildEnvironment": "V3"
   },
   "deploy": {
+    "runtime": "V2",
+    "numReplicas": 1,
     "startCommand": "node server/index.js",
-    "restartPolicyMaxRetries": 5,
-    "restartPolicyWindowMs": 60000,
     "healthcheckPath": "/health",
-    "healthcheckInterval": 10
+    "sleepApplication": false,
+    "useLegacyStacker": false,
+    "ipv6EgressEnabled": false,
+    "multiRegionConfig": {
+      "sfo": {
+        "numReplicas": 1
+      }
+    },
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 5
   }
 }
