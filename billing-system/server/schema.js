@@ -2,9 +2,19 @@ import { query } from './db.js';
 
 export async function initializeDatabase() {
   try {
+    // Drop dependent tables if they exist (to fix UUID/INT mismatch)
+    await query(`DROP TABLE IF EXISTS data_asset_usage CASCADE`);
+    await query(`DROP TABLE IF EXISTS data_asset_references CASCADE`);
+    await query(`DROP TABLE IF EXISTS data_assets CASCADE`);
+    await query(`DROP TABLE IF EXISTS proofs CASCADE`);
+    await query(`DROP TABLE IF EXISTS transfers CASCADE`);
+    await query(`DROP TABLE IF EXISTS transactions CASCADE`);
+    await query(`DROP TABLE IF EXISTS packages CASCADE`);
+    await query(`DROP TABLE IF EXISTS users CASCADE`);
+
     // Users table
     await query(`
-      CREATE TABLE IF NOT EXISTS users (
+      CREATE TABLE users (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         email VARCHAR(255) UNIQUE NOT NULL,
         credits_balance BIGINT DEFAULT 0,
@@ -15,7 +25,7 @@ export async function initializeDatabase() {
 
     // Packages table
     await query(`
-      CREATE TABLE IF NOT EXISTS packages (
+      CREATE TABLE packages (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         name VARCHAR(50) UNIQUE NOT NULL,
         credits BIGINT NOT NULL,
@@ -36,7 +46,7 @@ export async function initializeDatabase() {
 
     // Transactions table
     await query(`
-      CREATE TABLE IF NOT EXISTS transactions (
+      CREATE TABLE transactions (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         user_id UUID REFERENCES users(id),
         type VARCHAR(20) NOT NULL,
@@ -51,7 +61,7 @@ export async function initializeDatabase() {
 
     // Transfers table
     await query(`
-      CREATE TABLE IF NOT EXISTS transfers (
+      CREATE TABLE transfers (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         from_user_id UUID REFERENCES users(id),
         to_user_id UUID REFERENCES users(id),
@@ -64,7 +74,7 @@ export async function initializeDatabase() {
 
     // Proofs table (Phase A: Proof caching)
     await query(`
-      CREATE TABLE IF NOT EXISTS proofs (
+      CREATE TABLE proofs (
         reasoning_hash VARCHAR(64) PRIMARY KEY,
         proof VARCHAR(255) NOT NULL,
         user_id UUID REFERENCES users(id),
@@ -83,7 +93,7 @@ export async function initializeDatabase() {
 
     // Data Assets table (Phase B: Ecosystem registration)
     await query(`
-      CREATE TABLE IF NOT EXISTS data_assets (
+      CREATE TABLE data_assets (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         owner_id UUID REFERENCES users(id),
         proof_hash VARCHAR(64) UNIQUE,
@@ -104,7 +114,7 @@ export async function initializeDatabase() {
 
     // Data Asset References (Users accessing shared assets)
     await query(`
-      CREATE TABLE IF NOT EXISTS data_asset_references (
+      CREATE TABLE data_asset_references (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         asset_id UUID REFERENCES data_assets(id),
         user_id UUID REFERENCES users(id),
@@ -116,7 +126,7 @@ export async function initializeDatabase() {
 
     // Data Asset Usage (Track usage for revenue sharing)
     await query(`
-      CREATE TABLE IF NOT EXISTS data_asset_usage (
+      CREATE TABLE data_asset_usage (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         asset_id UUID REFERENCES data_assets(id),
         user_id UUID REFERENCES users(id),
