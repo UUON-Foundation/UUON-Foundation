@@ -1,0 +1,15 @@
+{
+  "$schema": "https://railway.app/json-schema/railway.json",
+  "build": {
+    "builder": "dockerfile",
+    "buildCommand": "docker build -f Dockerfile.billing -t uuon-billing .",
+    "dockerfilePath": "Dockerfile.billing"
+  },
+  "deploy": {
+    "startCommand": "node billing-system/server/index.js",
+    "restartPolicyMaxRetries": 5,
+    "restartPolicyWindowMs": 60000,
+    "healthcheckPath": "/health",
+    "healthcheckInterval": 10
+  }
+}
